@@ -1,0 +1,12 @@
+{
+  "name": "com.textextractor.native",
+  "description": "网页文字提取器本地应用",
+  "path": "D:\\code\\pala\\browser-extension\\native_host\\start.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://*",
+    "chrome-extension://abcdefghijklmnop",
+    "chrome-extension://abcdefghijklmno",
+    "chrome-extension://pabcdefghijklmnopqrstuvwxyz"
+  ]
+}

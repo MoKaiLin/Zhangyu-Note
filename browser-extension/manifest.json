@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "网页文字提取器",
+  "version": "1.0.0",
+  "description": "提取网页文字内容，分块处理，实时读屏显示",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "downloads",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "http://localhost:8765/*"
+  ],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "网页文字提取器"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "js/vendor/readability.js",
+        "js/content-deduplication.js",
+        "js/link-content-manager.js",
+        "js/smart-content-extractor.js",
+        "js/enhanced-content.js"
+      ],
+      "css": ["css/popup.css"]
+    }
+  ],
+  "background": {
+    "service_worker": "js/background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
