@@ -378,9 +378,13 @@ class EnhancedTextExtractor {
 
     console.log('视口尺寸:', viewportWidth, 'x', viewportHeight);
 
-    const selectors = 'p, div, span, h1, h2, h3, h4, h5, h6, article, section, li, blockquote, pre, td, th, label, a';
+    // 扩展元素选择器，包括div元素
+    const selectors = 'p, div, article, section, li, blockquote, pre, td, th, h1, h2, h3, h4, h5, h6';
     const elements = mainElement.querySelectorAll(selectors);
     console.log(`找到 ${elements.length} 个候选元素`);
+
+    // 存储已处理的元素文本，避免重复处理相同内容
+    const processedTexts = new Set();
 
     elements.forEach((element, index) => {
       try {
@@ -389,7 +393,12 @@ class EnhancedTextExtractor {
         }
 
         const text = element.textContent.trim();
-        if (text.length < 3) {
+        if (text.length < 5) {
+          return;
+        }
+
+        // 检查文本是否已经处理过
+        if (processedTexts.has(text)) {
           return;
         }
 
@@ -417,6 +426,7 @@ class EnhancedTextExtractor {
             type: 'text',
             position: { top: rect.top, left: rect.left }
           });
+          processedTexts.add(text);
         }
       } catch (error) {
         console.log(`元素 ${index}: 获取rect失败`, error);
@@ -433,6 +443,12 @@ class EnhancedTextExtractor {
     const id = (element.id || '').toLowerCase();
     const role = (element.getAttribute('role') || '').toLowerCase();
 
+    // 直接跳过某些标签
+    if (['script', 'style', 'noscript', 'meta', 'link', 'head', 'title', 'iframe', 'video', 'audio', 'canvas'].includes(tagName)) {
+      return true;
+    }
+
+    // 广告相关
     const adPatterns = [
       'ad-', 'ads-', 'advert', 'advertisement', 'sponsor', 'promo', 'promotion',
       'banner', 'pop-up', 'popup', 'modal', 'dialog', 'overlay',
@@ -446,18 +462,7 @@ class EnhancedTextExtractor {
       }
     }
 
-    const navPatterns = [
-      'nav', 'navbar', 'navigation', 'menu', 'header', 'footer', 'sidebar',
-      'toolbar', 'breadcrumb', 'pagination', 'pager', 'tabs', 'tablist',
-      '导航', '菜单', '侧边', '页脚', '页头', '目录'
-    ];
-
-    for (const pattern of navPatterns) {
-      if (className.includes(pattern) || id.includes(pattern)) {
-        return true;
-      }
-    }
-
+    // 社交媒体相关
     const socialPatterns = [
       'social', 'share', 'sharing', 'like', 'follow', 'comment',
       'facebook', 'twitter', 'weibo', 'wechat', 'qq',
@@ -470,6 +475,7 @@ class EnhancedTextExtractor {
       }
     }
 
+    // Cookie同意相关
     const cookiePatterns = [
       'cookie', 'consent', 'gdpr', 'notice',
       '隐私', '同意'
@@ -481,14 +487,21 @@ class EnhancedTextExtractor {
       }
     }
 
-    if (role === 'navigation' || role === 'complementary' || role === 'banner' || 
-        role === 'search' || role === 'contentinfo') {
+    // ARIA角色
+    if (role === 'navigation' || role === 'search' || role === 'banner') {
       return true;
     }
 
-    const parentNav = element.closest('nav, header, footer, aside, .sidebar, #sidebar, #header, #footer');
-    if (parentNav) {
-      return true;
+    // 只跳过直接的导航元素，不跳过其内容
+    const directNavElements = element.closest('nav, .navbar, .navigation, .menu, .sidebar, #sidebar');
+    if (directNavElements) {
+      // 检查是否是导航元素的直接子元素
+      const parent = element.parentElement;
+      if (parent && (parent.tagName.toLowerCase() === 'nav' || parent.classList.contains('navbar') || 
+          parent.classList.contains('navigation') || parent.classList.contains('menu') ||
+          parent.classList.contains('sidebar') || parent.id === 'sidebar')) {
+        return true;
+      }
     }
 
     return false;
@@ -560,7 +573,7 @@ class EnhancedTextExtractor {
       }
 
       let text = item.text.trim();
-      if (text.length < 10) {
+      if (text.length < 5) {
         console.log(`元素 ${index}: 文本太短，跳过`);
         return;
       }
@@ -586,11 +599,57 @@ class EnhancedTextExtractor {
         /^(Chapter|Section|Part|Page)\s*\d+/i,
         /^(第[一二三四五六七八九十百千]+[章节篇部]|[0-9]+[.、])/,
         /^\d+[\.\)]\s*\d+[\.\)]/,
+        /^(list|List|LIST|列表|目录|清单)/,
+        /^(statistics|Statistics|STATISTICS|统计|统计数据)/,
+        /^(flag|Flag|FLAG|标志|标记)/,
+        /^(index|Index|INDEX|索引)/,
+        /^(summary|Summary|SUMMARY|摘要|概要)/,
+        /^(reference|Reference|REFERENCE|参考)/,
+        /^(table|Table|TABLE|表格)/,
+        /^(figure|Figure|FIGURE|图表|图片)/,
+        /^(note|Note|NOTE|笔记|备注)/,
+        /^(appendix|Appendix|APPENDIX|附录)/,
+        /^(toc|TOC|目录表)/,
+        /^(legend|Legend|LEGEND|图例|说明)/,
+        /^(key|Key|KEY|键|关键词)/,
+        /^(chart|Chart|CHART|图表)/,
+        /^(graph|Graph|GRAPH|图形)/,
+        /^(source|Source|SOURCE|来源|出处)/,
+        /^(author|Author|AUTHOR|author)/,
+        /^(date|Date|DATE|日期|时间)/,
+        /^(copyright|Copyright|COPYRIGHT|版权)/,
+        /^(contact|Contact|CONTACT|联系|联系方式)/,
+        /^(address|Address|ADDRESS|地址)/,
+        /^(email|Email|EMAIL|邮箱|电子邮件)/,
+        /^(phone|Phone|PHONE|电话|手机)/,
+        /^(fax|Fax|FAX|传真)/,
+        /^(logo|Logo|LOGO|标志|标识)/,
+        /©|\(c\)/i,
+      ];
+
+      const contentNoisePatterns = [
+        /\b(list|statistics|flag|index|summary|reference)\b/i,
+        /\b(table|figure|note|appendix|toc|legend)\b/i,
+        /\b(chart|graph|source|author|date|copyright)\b/i,
+        /\b(contact|address|email|phone|fax|logo)\b/i,
+        /\b(登录|注册|首页|目录|列表|统计)\b/,
+        /\b(导航|菜单|侧边栏|页脚|页头)\b/,
+        /\b(分享到|分享到微博|分享到微信)\b/,
+        /\b(Copyright|©|\(c\))\s*\d{4}/i,
+        /^\s*[\d\w]+\s*[\.、]\s*[\d\w]+\s*[\.、]/,
+        /^[\s\S]{0,30}$/,
       ];
 
       for (const pattern of noisePatterns) {
         if (pattern.test(text)) {
           console.log(`元素 ${index}: 匹配噪声模式，跳过`);
+          return;
+        }
+      }
+
+      for (const pattern of contentNoisePatterns) {
+        if (pattern.test(text)) {
+          console.log(`元素 ${index}: 匹配内容噪声模式，跳过`);
           return;
         }
       }
@@ -795,6 +854,14 @@ class EnhancedTextExtractor {
 
       console.log(`处理段落 ${index}: 长度=${trimmedParagraph.length}, 内容=${trimmedParagraph.substring(0, 100)}...`);
 
+      // 检查是否重复
+      const duplicateCheck = this.deduplication.isDuplicate(trimmedParagraph, this.existingFingerprints);
+      if (duplicateCheck.isDuplicate) {
+        console.log(`⊗ 检测到重复内容，相似度: ${duplicateCheck.similarity.toFixed(2)}`);
+        duplicateCount++;
+        return;
+      }
+
       const elementType = this.getElementType(trimmedParagraph);
       typeDistribution[elementType]++;
       const typeLabel = this.getTypeLabel(elementType);
@@ -816,6 +883,12 @@ class EnhancedTextExtractor {
         });
         processedText += `${typeLabel} ${trimmedParagraph}\n\n`;
         addedCount++;
+        
+        // 添加到已处理指纹列表
+        const fingerprint = this.deduplication.generateFingerprint(trimmedParagraph);
+        if (fingerprint) {
+          this.existingFingerprints.push(fingerprint);
+        }
       }
     });
 
@@ -823,7 +896,7 @@ class EnhancedTextExtractor {
     this.currentAddedCount = addedCount;
     this.currentTypeDistribution = typeDistribution;
 
-    console.log(`处理完成，添加了 ${addedCount} 个段落，处理后的内容长度: ${processedText.length}`);
+    console.log(`处理完成，添加了 ${addedCount} 个段落，跳过了 ${duplicateCount} 个重复段落，处理后的内容长度: ${processedText.length}`);
     return processedText;
   }
 

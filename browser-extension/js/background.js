@@ -140,51 +140,28 @@ function saveViaDownloadsAPI(text, filename) {
                   console.log('实际保存路径:', filepath);
                   
                   // 延迟一点时间确保文件写入完成，然后执行移动脚本
-                  setTimeout(async () => {
+                    setTimeout(async () => {
                     console.log('='.repeat(60));
                     console.log('开始尝试移动文件...');
                     console.log('='.repeat(60));
                     
-                    let moved = false;
-                    let moveError = null;
-                    
-                    // 方法1: 尝试通过HTTP服务器移动文件
                     try {
-                      const result = await moveFilesViaHttpServer();
-                      console.log('✓ HTTP服务器移动成功');
-                      moved = true;
-                    } catch (httpError) {
-                      console.log('✗ HTTP服务器移动失败:', httpError.message);
-                      
-                      // 方法2: 尝试通过Native Messaging移动文件
-                      try {
-                        const result = await executeMoveScript();
-                        console.log('✓ Native Messaging移动成功');
-                        moved = true;
-                      } catch (nativeError) {
-                        console.log('✗ Native Messaging移动失败:', nativeError.message);
-                        moveError = nativeError;
-                      }
+                        const moveResult = await moveFileToOutputFolder(filepath, finalFilename);
+                        console.log('='.repeat(60));
+                        console.log('✓ 文件移动成功');
+                        console.log('✓ 目标路径:', moveResult);
+                        console.log('='.repeat(60));
+                        resolve({ filepath: moveResult, moved: true });
+                    } catch (error) {
+                        console.warn('='.repeat(60));
+                        console.warn('✗ 所有自动移动方法都失败');
+                        console.warn('✗ 文件保留在:', filepath);
+                        console.warn('✗ 请手动运行: node move_downloads.js');
+                        console.warn('✗ 或启动HTTP服务器: node file_mover_server.js');
+                        console.warn('='.repeat(60));
+                        resolve({ filepath, moved: false, error: error?.message });
                     }
-                    
-                    if (moved) {
-                      // 返回项目output文件夹的路径
-                      const projectOutputPath = 'D:\\code\\pala\\output\\' + finalFilename;
-                      console.log('='.repeat(60));
-                      console.log('✓ 文件移动成功');
-                      console.log('✓ 目标路径:', projectOutputPath);
-                      console.log('='.repeat(60));
-                      resolve({ filepath: projectOutputPath, moved: true });
-                    } else {
-                      console.warn('='.repeat(60));
-                      console.warn('✗ 所有自动移动方法都失败');
-                      console.warn('✗ 文件保留在:', filepath);
-                      console.warn('✗ 请手动运行: node move_downloads.js');
-                      console.warn('✗ 或启动HTTP服务器: node file_mover_server.js');
-                      console.warn('='.repeat(60));
-                      resolve({ filepath, moved: false, error: moveError?.message });
-                    }
-                  }, 1500); // 延迟1.5秒确保文件写入完成
+                }, 1500); // 延迟1.5秒确保文件写入完成
                 } else {
                   resolve({ filepath: relativePath });
                 }
@@ -214,29 +191,49 @@ function saveViaDownloadsAPI(text, filename) {
 }
 
 // 移动文件到正确的output文件夹
-function moveFileToOutputFolder(sourcePath, filename) {
+async function moveFileToOutputFolder(sourcePath, filename) {
+  console.log('='.repeat(60));
+  console.log('尝试移动文件到output文件夹...');
+  console.log('源路径:', sourcePath);
+  console.log('文件名:', filename);
+  console.log('='.repeat(60));
+  
+  // 尝试不同的移动方法，按优先级排序
+  const moveMethods = [
+    { name: 'Native Messaging直接移动', method: () => moveViaNativeMessaging(sourcePath, filename) },
+    { name: 'HTTP服务器移动', method: () => moveViaHttpServer() },
+    { name: 'Native Messaging执行移动脚本', method: () => executeMoveScript() },
+    { name: '手动移动提示', method: () => tryManualMove(sourcePath, filename) }
+  ];
+  
+  for (const { name, method } of moveMethods) {
+    try {
+      console.log(`\n尝试方法: ${name}`);
+      const result = await method();
+      console.log(`✓ ${name}成功`);
+      return result;
+    } catch (error) {
+      console.log(`✗ ${name}失败:`, error.message);
+      // 继续尝试下一个方法
+    }
+  }
+  
+  // 所有方法都失败
+  console.error('所有移动方法都失败');
+  return sourcePath;
+}
+
+// 通过Native Messaging直接移动文件
+function moveViaNativeMessaging(sourcePath, filename) {
   return new Promise((resolve, reject) => {
     try {
-      console.log('='.repeat(60));
-      console.log('尝试移动文件到output文件夹...');
-      console.log('源路径:', sourcePath);
-      console.log('文件名:', filename);
-      console.log('='.repeat(60));
-      
-      // 首先检查Native Host是否可用
       console.log('检查Native Host是否可用...');
       chrome.runtime.sendNativeMessage(
         'com.textextractor.native',
         { action: 'ping' },
         (pingResponse) => {
           if (chrome.runtime.lastError) {
-            console.error('Native Host不可用:', chrome.runtime.lastError.message);
-            console.log('尝试直接通过downloads API获取下载路径...');
-            
-            // Native Host不可用，尝试手动移动
-            tryManualMove(sourcePath, filename)
-              .then(resolve)
-              .catch(reject);
+            reject(new Error('Native Host不可用: ' + chrome.runtime.lastError.message));
             return;
           }
           
@@ -252,11 +249,7 @@ function moveFileToOutputFolder(sourcePath, filename) {
             },
             (response) => {
               if (chrome.runtime.lastError) {
-                console.error('Native Messaging移动文件错误:', chrome.runtime.lastError);
-                console.log('尝试手动移动文件...');
-                tryManualMove(sourcePath, filename)
-                  .then(resolve)
-                  .catch(reject);
+                reject(new Error('Native Messaging移动文件错误: ' + chrome.runtime.lastError.message));
               } else if (response && response.success) {
                 console.log('='.repeat(60));
                 console.log('✓ Native Messaging移动文件成功');
@@ -264,28 +257,21 @@ function moveFileToOutputFolder(sourcePath, filename) {
                 console.log('='.repeat(60));
                 resolve(response.filepath);
               } else {
-                console.error('Native Host返回错误:', response?.error);
-                console.log('尝试手动移动文件...');
-                tryManualMove(sourcePath, filename)
-                  .then(resolve)
-                  .catch(reject);
+                reject(new Error('Native Host返回错误: ' + (response?.error || '未知错误')));
               }
             }
           );
         }
       );
     } catch (error) {
-      console.error('移动文件时出错:', error);
-      tryManualMove(sourcePath, filename)
-        .then(resolve)
-        .catch(reject);
+      reject(error);
     }
   });
 }
 
 // 手动移动文件的备用方案
 function tryManualMove(sourcePath, filename) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     console.log('='.repeat(60));
     console.log('手动移动文件...');
     console.log('源路径:', sourcePath);
@@ -296,6 +282,7 @@ function tryManualMove(sourcePath, filename) {
     console.log('Service Worker无法直接访问文件系统');
     console.log('文件保存在:', sourcePath);
     console.log('请手动运行: node move_downloads.js');
+    console.log('或启动HTTP服务器: node file_mover_server.js');
     
     // 尝试通过打开下载文件夹来提示用户
     chrome.downloads.showDefaultFolder();
@@ -318,8 +305,7 @@ function executeMoveScript() {
       },
       (response) => {
         if (chrome.runtime.lastError) {
-          console.error('执行移动脚本失败:', chrome.runtime.lastError);
-          reject(chrome.runtime.lastError);
+          reject(new Error('执行移动脚本失败: ' + chrome.runtime.lastError.message));
         } else if (response && response.success) {
           console.log('='.repeat(60));
           console.log('✓ 移动脚本执行成功');
@@ -327,8 +313,7 @@ function executeMoveScript() {
           console.log('='.repeat(60));
           resolve(response);
         } else {
-          console.error('移动脚本返回错误:', response?.error);
-          reject(new Error(response?.error || '执行移动脚本失败'));
+          reject(new Error('移动脚本返回错误: ' + (response?.error || '执行移动脚本失败')));
         }
       }
     );
@@ -336,7 +321,7 @@ function executeMoveScript() {
 }
 
 // 通过HTTP服务器移动文件（备用方案）
-async function moveFilesViaHttpServer() {
+async function moveViaHttpServer() {
   console.log('='.repeat(60));
   console.log('尝试通过HTTP服务器移动文件...');
   console.log('='.repeat(60));
@@ -353,15 +338,6 @@ async function moveFilesViaHttpServer() {
     }
     
     console.log('HTTP服务器可用，发送移动请求...');
-    
-    // 获取扩展的安装路径
-    const extensionUrl = chrome.runtime.getURL('');
-    console.log('扩展URL:', extensionUrl);
-    
-    // 从扩展URL提取项目路径
-    // 扩展URL格式: chrome-extension://<id>/
-    // 我们需要找到实际的文件系统路径
-    // 由于Service Worker无法直接访问文件系统，我们使用相对路径
     
     // 发送移动文件请求，不包含项目路径（让服务器使用默认路径）
     const moveResponse = await fetch('http://localhost:8765/move', {

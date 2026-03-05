@@ -6,9 +6,123 @@ const os = require('os');
 console.log('Native Messaging应用已启动');
 console.log('等待来自Chrome扩展的消息...');
 
+// 可能的项目路径列表（按优先级排序）
+function getPossibleProjectRoots() {
+    const possiblePaths = [];
+    
+    // 1. 当前目录的上级上级目录（默认路径）
+    possiblePaths.push(path.join(__dirname, '..', '..'));
+    
+    // 2. 当前目录（脚本所在目录）
+    possiblePaths.push(__dirname);
+    
+    // 3. 常见的工作目录
+    const cwd = process.cwd();
+    if (cwd !== __dirname) {
+        possiblePaths.push(cwd);
+    }
+    
+    // 4. 用户主目录下的常见位置
+    const homeDir = os.homedir();
+    const commonLocations = [
+        'pala',
+        'code/pala',
+        'projects/pala',
+        'Documents/pala',
+        'Desktop/pala',
+        'workspace/pala',
+        'dev/pala',
+        'Downloads/pala',
+        'OneDrive/pala',
+        'OneDrive/Documents/pala',
+        'OneDrive/Desktop/pala',
+        'Dropbox/pala',
+        'Google Drive/pala',
+        'gdrive/pala'
+    ];
+    
+    for (const location of commonLocations) {
+        possiblePaths.push(path.join(homeDir, location));
+    }
+    
+    // 5. Windows常见的代码目录
+    if (process.platform === 'win32') {
+        const winLocations = [
+            'D:\\code\\pala',
+            'D:\\projects\\pala',
+            'D:\\workspace\\pala',
+            'D:\\dev\\pala',
+            'C:\\code\\pala',
+            'C:\\projects\\pala',
+            'C:\\workspace\\pala',
+            'C:\\dev\\pala',
+            'E:\\code\\pala',
+            'E:\\projects\\pala',
+            'E:\\workspace\\pala',
+            'E:\\dev\\pala',
+            'F:\\code\\pala',
+            'F:\\projects\\pala',
+            'F:\\workspace\\pala',
+            'F:\\dev\\pala'
+        ];
+        possiblePaths.push(...winLocations);
+    }
+    
+    // 6. macOS和Linux常见的代码目录
+    if (process.platform === 'darwin' || process.platform === 'linux') {
+        const unixLocations = [
+            '/Users/' + path.basename(homeDir) + '/pala',
+            '/Users/' + path.basename(homeDir) + '/code/pala',
+            '/Users/' + path.basename(homeDir) + '/projects/pala',
+            '/home/' + path.basename(homeDir) + '/pala',
+            '/home/' + path.basename(homeDir) + '/code/pala',
+            '/home/' + path.basename(homeDir) + '/projects/pala',
+            '/opt/pala',
+            '/usr/local/pala'
+        ];
+        possiblePaths.push(...unixLocations);
+    }
+    
+    // 7. 从环境变量获取可能的路径
+    if (process.env.PALA_HOME) {
+        possiblePaths.push(process.env.PALA_HOME);
+    }
+    if (process.env.PROJECT_HOME) {
+        possiblePaths.push(path.join(process.env.PROJECT_HOME, 'pala'));
+    }
+    if (process.env.WORKSPACE) {
+        possiblePaths.push(path.join(process.env.WORKSPACE, 'pala'));
+    }
+    
+    return possiblePaths;
+}
+
+// 查找有效的项目根目录
+function findProjectRoot() {
+    const possiblePaths = getPossibleProjectRoots();
+    
+    for (const testPath of possiblePaths) {
+        // 检查是否是有效的项目目录（包含browser-extension文件夹或output文件夹）
+        const hasBrowserExtension = fs.existsSync(path.join(testPath, 'browser-extension'));
+        const hasOutputFolder = fs.existsSync(path.join(testPath, 'output'));
+        const hasManifest = fs.existsSync(path.join(testPath, 'browser-extension', 'manifest.json'));
+        
+        if (hasBrowserExtension || hasOutputFolder || hasManifest) {
+            console.log('✓ 找到有效的项目目录:', testPath);
+            return testPath;
+        }
+    }
+    
+    // 如果没有找到，使用默认路径
+    const defaultPath = path.join(__dirname, '..', '..');
+    console.log('! 未找到有效的项目目录，使用默认路径:', defaultPath);
+    return defaultPath;
+}
+
 // 获取项目output文件夹路径
 function getProjectOutputFolder() {
-    return path.join(__dirname, '..', '..', 'output');
+    const projectRoot = findProjectRoot();
+    return path.join(projectRoot, 'output');
 }
 
 // 移动文件到项目output文件夹
@@ -46,9 +160,18 @@ function moveToProjectOutput(sourcePath, filename) {
 
 // 导出文本到指定文件夹
 function exportTextToFile(filename, content, outputFolder) {
+    console.log('='.repeat(60));
+    console.log('开始导出文本到文件');
+    console.log('='.repeat(60));
+    console.log('原始文件名:', filename);
+    console.log('输出文件夹:', outputFolder);
+    console.log('内容长度:', content.length, '字符');
+    console.log('='.repeat(60));
+    
     try {
         // 标准化路径
         const normalizedFolder = path.normalize(outputFolder);
+        console.log('标准化后的文件夹路径:', normalizedFolder);
         
         // 验证文件名
         if (!filename || filename.trim() === '') {
@@ -57,27 +180,38 @@ function exportTextToFile(filename, content, outputFolder) {
         
         // 清理文件名中的非法字符
         const sanitizedFilename = filename.replace(/[<>:"|?*]/g, '_');
+        console.log('清理后的文件名:', sanitizedFilename);
         
         // 检查是否是相对路径output
         if (normalizedFolder === 'output' || normalizedFolder === '.\\output' || normalizedFolder === './output') {
             console.log('检测到相对路径output，直接保存到项目output文件夹');
             
             const projectOutputFolder = getProjectOutputFolder();
+            console.log('项目output文件夹:', projectOutputFolder);
             
             // 确保项目output文件夹存在
             if (!fs.existsSync(projectOutputFolder)) {
+                console.log('项目output文件夹不存在，创建中...');
                 fs.mkdirSync(projectOutputFolder, { recursive: true });
+                console.log('✓ 创建项目output文件夹成功');
+            } else {
+                console.log('✓ 项目output文件夹已存在');
             }
             
             const projectFilepath = path.join(projectOutputFolder, sanitizedFilename);
+            console.log('目标文件路径:', projectFilepath);
             
             // 直接写入项目output文件夹
+            console.log('写入文件中...');
             fs.writeFileSync(projectFilepath, content, 'utf8');
+            console.log('✓ 文件写入成功');
             
             const fileSize = fs.statSync(projectFilepath).size;
-            
-            console.log(`文件已保存到项目output: ${sanitizedFilename}`);
             console.log(`文件大小: ${fileSize} 字节`);
+            
+            console.log('='.repeat(60));
+            console.log('导出成功');
+            console.log('='.repeat(60));
             
             return {
                 success: true,
@@ -91,16 +225,28 @@ function exportTextToFile(filename, content, outputFolder) {
         
         // 确保输出文件夹存在
         if (!fs.existsSync(normalizedFolder)) {
+            console.log('输出文件夹不存在，创建中...');
             fs.mkdirSync(normalizedFolder, { recursive: true });
+            console.log('✓ 创建输出文件夹成功');
+        } else {
+            console.log('✓ 输出文件夹已存在');
         }
         
         // 组合完整文件路径
         const filepath = path.join(normalizedFolder, sanitizedFilename);
+        console.log('目标文件路径:', filepath);
         
         // 写入文件
+        console.log('写入文件中...');
         fs.writeFileSync(filepath, content, 'utf8');
+        console.log('✓ 文件写入成功');
         
         const fileSize = fs.statSync(filepath).size;
+        console.log(`文件大小: ${fileSize} 字节`);
+        
+        console.log('='.repeat(60));
+        console.log('导出成功');
+        console.log('='.repeat(60));
         
         return {
             success: true,
@@ -111,6 +257,12 @@ function exportTextToFile(filename, content, outputFolder) {
             moved: false
         };
     } catch (error) {
+        console.error('='.repeat(60));
+        console.error('导出文件失败:');
+        console.error('错误信息:', error.message);
+        console.error('错误堆栈:', error.stack);
+        console.error('='.repeat(60));
+        
         return {
             success: false,
             error: error.message,
@@ -153,84 +305,179 @@ function handleNativeMessage(message) {
 // 执行移动脚本
 function executeMoveScript() {
     try {
-        console.log('执行移动脚本...');
+        console.log('='.repeat(60));
+        console.log('开始执行移动脚本');
+        console.log('='.repeat(60));
         
-        const projectRoot = path.join(__dirname, '..', '..');
-        const projectOutputFolder = path.join(projectRoot, 'output');
+        const projectRoot = findProjectRoot();
+        const projectOutputFolder = getProjectOutputFolder();
         const downloadsFolder = path.join(os.homedir(), 'Downloads');
         const downloadsOutputFolder = path.join(downloadsFolder, 'output');
         
+        console.log('项目根目录:', projectRoot);
         console.log('项目output文件夹:', projectOutputFolder);
+        console.log('浏览器下载根目录:', downloadsFolder);
         console.log('浏览器下载output文件夹:', downloadsOutputFolder);
+        console.log('='.repeat(60));
         
         // 确保项目output文件夹存在
         if (!fs.existsSync(projectOutputFolder)) {
+            console.log('项目output文件夹不存在，创建中...');
             fs.mkdirSync(projectOutputFolder, { recursive: true });
-            console.log('创建项目output文件夹');
+            console.log('✓ 创建项目output文件夹成功');
+        } else {
+            console.log('✓ 项目output文件夹已存在');
         }
-        
-        // 检查浏览器下载的output文件夹是否存在
-        if (!fs.existsSync(downloadsOutputFolder)) {
-            console.log('浏览器下载output文件夹不存在，无需移动');
-            return {
-                success: true,
-                movedCount: 0,
-                message: '没有需要移动的文件',
-                timestamp: new Date().toISOString()
-            };
-        }
-        
-        const files = fs.readdirSync(downloadsOutputFolder);
-        console.log(`找到 ${files.length} 个文件/文件夹在下载output文件夹`);
         
         let movedCount = 0;
+        let skippedCount = 0;
+        let failedCount = 0;
         
-        files.forEach(file => {
-            const sourcePath = path.join(downloadsOutputFolder, file);
-            const targetPath = path.join(projectOutputFolder, file);
+        // 检查浏览器下载根目录
+        if (fs.existsSync(downloadsFolder)) {
+            console.log('✓ 浏览器下载文件夹存在，检查文件...');
+            const files = fs.readdirSync(downloadsFolder);
+            console.log(`✓ 找到 ${files.length} 个文件/文件夹在下载根目录`);
             
-            // 检查是否是文件
-            const stats = fs.statSync(sourcePath);
-            if (!stats.isFile()) {
-                console.log(`跳过非文件项: ${file}`);
-                return;
-            }
-            
-            try {
-                // 如果目标文件已存在，先删除
-                if (fs.existsSync(targetPath)) {
-                    fs.unlinkSync(targetPath);
-                    console.log(`删除已存在的目标文件: ${file}`);
+            files.forEach(file => {
+                // 只处理以screen_reader开头的文件
+                if (!file.startsWith('screen_reader_') || !file.endsWith('.txt')) {
+                    skippedCount++;
+                    return;
                 }
                 
-                // 复制文件
-                fs.copyFileSync(sourcePath, targetPath);
-                console.log(`✓ 复制文件: ${file}`);
-                
-                // 删除源文件
-                fs.unlinkSync(sourcePath);
-                console.log(`✓ 删除源文件: ${file}`);
-                
-                movedCount++;
-            } catch (error) {
-                console.error(`✗ 移动文件失败 ${file}:`, error.message);
-            }
-        });
-        
-        // 尝试删除空的output文件夹
-        try {
-            const remainingFiles = fs.readdirSync(downloadsOutputFolder);
-            if (remainingFiles.length === 0) {
-                fs.rmdirSync(downloadsOutputFolder);
-                console.log('✓ 删除空的output文件夹');
-            } else {
-                console.log(`output文件夹中还有 ${remainingFiles.length} 个文件/文件夹，不删除`);
-            }
-        } catch (e) {
-            console.log('无法删除output文件夹:', e.message);
+                const sourcePath = path.join(downloadsFolder, file);
+                const targetPath = path.join(projectOutputFolder, file);
+
+                // 检查是否是文件
+                try {
+                    const stats = fs.statSync(sourcePath);
+                    if (!stats.isFile()) {
+                        console.log(`! 跳过非文件项: ${file}`);
+                        skippedCount++;
+                        return;
+                    }
+                    console.log(`\n处理文件: ${file}`);
+                    console.log(`源路径: ${sourcePath}`);
+                    console.log(`目标路径: ${targetPath}`);
+                } catch (error) {
+                    console.error(`✗ 无法访问文件: ${file}`, error.message);
+                    failedCount++;
+                    return;
+                }
+
+                try {
+                    // 如果目标文件已存在，先删除
+                    if (fs.existsSync(targetPath)) {
+                        console.log(`! 目标文件已存在，删除中...`);
+                        fs.unlinkSync(targetPath);
+                        console.log(`✓ 删除已存在的目标文件: ${file}`);
+                    }
+
+                    // 复制文件
+                    console.log('复制文件中...');
+                    fs.copyFileSync(sourcePath, targetPath);
+                    console.log(`✓ 复制文件: ${file}`);
+
+                    // 删除源文件
+                    console.log('删除源文件中...');
+                    fs.unlinkSync(sourcePath);
+                    console.log(`✓ 删除源文件: ${file}`);
+
+                    movedCount++;
+                    console.log(`✓ 文件移动成功`);
+                } catch (error) {
+                    console.error(`✗ 移动文件失败 ${file}:`, error.message);
+                    failedCount++;
+                }
+            });
+        } else {
+            console.log('! 浏览器下载文件夹不存在，无需移动');
         }
         
-        console.log(`\n总结: 成功移动 ${movedCount} 个文件到 ${projectOutputFolder}`);
+        // 检查浏览器下载的output文件夹
+        if (fs.existsSync(downloadsOutputFolder)) {
+            console.log('\n检查浏览器下载的output文件夹...');
+            const outputFiles = fs.readdirSync(downloadsOutputFolder);
+            console.log(`找到 ${outputFiles.length} 个文件/文件夹在下载output文件夹`);
+            
+            outputFiles.forEach(file => {
+                // 只处理以screen_reader开头的文件
+                if (!file.startsWith('screen_reader_') || !file.endsWith('.txt')) {
+                    skippedCount++;
+                    return;
+                }
+                
+                const sourcePath = path.join(downloadsOutputFolder, file);
+                const targetPath = path.join(projectOutputFolder, file);
+                
+                // 检查是否是文件
+                try {
+                    const stats = fs.statSync(sourcePath);
+                    if (!stats.isFile()) {
+                        console.log(`! 跳过非文件项: ${file}`);
+                        skippedCount++;
+                        return;
+                    }
+                    console.log(`\n处理文件: ${file}`);
+                    console.log(`源路径: ${sourcePath}`);
+                    console.log(`目标路径: ${targetPath}`);
+                } catch (error) {
+                    console.error(`✗ 无法访问文件: ${file}`, error.message);
+                    failedCount++;
+                    return;
+                }
+                
+                try {
+                    // 如果目标文件已存在，先删除
+                    if (fs.existsSync(targetPath)) {
+                        console.log(`! 目标文件已存在，删除中...`);
+                        fs.unlinkSync(targetPath);
+                        console.log(`✓ 删除已存在的目标文件: ${file}`);
+                    }
+                    
+                    // 复制文件
+                    console.log('复制文件中...');
+                    fs.copyFileSync(sourcePath, targetPath);
+                    console.log(`✓ 复制文件: ${file}`);
+                    
+                    // 删除源文件
+                    console.log('删除源文件中...');
+                    fs.unlinkSync(sourcePath);
+                    console.log(`✓ 删除源文件: ${file}`);
+                    
+                    movedCount++;
+                    console.log(`✓ 文件移动成功`);
+                } catch (error) {
+                    console.error(`✗ 移动文件失败 ${file}:`, error.message);
+                    failedCount++;
+                }
+            });
+            
+            // 尝试删除空的output文件夹
+            try {
+                const remainingFiles = fs.readdirSync(downloadsOutputFolder);
+                if (remainingFiles.length === 0) {
+                    fs.rmdirSync(downloadsOutputFolder);
+                    console.log('✓ 删除空的output文件夹');
+                } else {
+                    console.log(`output文件夹中还有 ${remainingFiles.length} 个文件/文件夹，不删除`);
+                }
+            } catch (e) {
+                console.log('无法删除output文件夹:', e.message);
+            }
+        } else {
+            console.log('! 浏览器下载output文件夹不存在，无需移动');
+        }
+        
+        console.log('\n' + '='.repeat(60));
+        console.log('移动文件操作总结');
+        console.log('='.repeat(60));
+        console.log(`成功移动: ${movedCount} 个文件`);
+        console.log(`跳过: ${skippedCount} 个文件/文件夹`);
+        console.log(`失败: ${failedCount} 个文件`);
+        console.log(`目标文件夹: ${projectOutputFolder}`);
+        console.log('='.repeat(60));
         
         return {
             success: true,
@@ -240,7 +487,11 @@ function executeMoveScript() {
         };
         
     } catch (error) {
-        console.error('执行移动脚本失败:', error);
+        console.error('='.repeat(60));
+        console.error('执行移动脚本失败:');
+        console.error('错误信息:', error.message);
+        console.error('错误堆栈:', error.stack);
+        console.error('='.repeat(60));
         return {
             success: false,
             error: error.message,
