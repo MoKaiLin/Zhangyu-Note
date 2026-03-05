@@ -54,6 +54,7 @@ class EnhancedTextExtractor {
 
     this.existingFingerprints = [];
     this.setupEventListeners();
+    this.loadSettings();
   }
 
   setupEventListeners() {
@@ -97,6 +98,7 @@ class EnhancedTextExtractor {
     this.setupUrlChangeMonitoring();
     this.createPopup();
     this.disableLinks();
+    this.setupMutationObserver();
     this.showStatus('读屏已开始', 'success');
     this.realTimeExtraction();
   }
@@ -183,7 +185,30 @@ class EnhancedTextExtractor {
       this.stopExtraction();
     });
 
+    const settingsButton = document.createElement('button');
+    settingsButton.textContent = '⚙️';
+    settingsButton.title = '设置';
+    settingsButton.style.cssText = `
+      background: none;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      color: #666;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 10px;
+    `;
+    settingsButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showSettingsPanel();
+    });
+
     header.appendChild(title);
+    header.appendChild(settingsButton);
     header.appendChild(closeButton);
     this.popup.appendChild(header);
 
@@ -1120,6 +1145,7 @@ class EnhancedTextExtractor {
     
     this.clearHighlights();
     this.cleanupUrlChangeMonitoring();
+    this.cleanupMutationObserver();
     
     if (this.popup) {
       this.popup.remove();
@@ -1351,6 +1377,396 @@ class EnhancedTextExtractor {
       history.replaceState = this.originalLocationMethods.replaceState;
       this.originalLocationMethods = null;
     }
+  }
+
+  setupMutationObserver() {
+    if (this.mutationObserver) {
+      this.mutationObserver.disconnect();
+    }
+
+    this.mutationObserver = new MutationObserver((mutations) => {
+      if (!this.isExtracting) return;
+
+      let hasContentChanges = false;
+      
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          // 检查是否添加了新的内容节点
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // 检查是否是包含文本的元素
+              if (node.textContent && node.textContent.trim().length > 0) {
+                hasContentChanges = true;
+              }
+              // 检查是否有子元素包含文本
+              const textNodes = node.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, div, span');
+              if (textNodes.length > 0) {
+                hasContentChanges = true;
+              }
+            }
+          });
+        } else if (mutation.type === 'characterData') {
+          // 文本内容变化
+          hasContentChanges = true;
+        }
+      });
+
+      if (hasContentChanges) {
+        console.log('检测到DOM内容变化，重新提取文本...');
+        // 延迟执行，避免频繁提取
+        setTimeout(() => {
+          if (this.isExtracting) {
+            this.realTimeExtraction();
+          }
+        }, 500);
+      }
+    });
+
+    // 开始观察整个文档的变化
+    this.mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      characterDataOldValue: false
+    });
+
+    console.log('MutationObserver已启动，开始监听DOM变化...');
+  }
+
+  cleanupMutationObserver() {
+    if (this.mutationObserver) {
+      this.mutationObserver.disconnect();
+      this.mutationObserver = null;
+      console.log('MutationObserver已停止');
+    }
+  }
+
+  showSettingsPanel() {
+    if (this.settingsPanel) {
+      this.settingsPanel.style.display = 'block';
+      return;
+    }
+
+    this.settingsPanel = document.createElement('div');
+    this.settingsPanel.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 400px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      padding: 20px;
+      z-index: 10000;
+      font-family: Arial, sans-serif;
+    `;
+
+    const settingsHeader = document.createElement('div');
+    settingsHeader.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    `;
+
+    const settingsTitle = document.createElement('h3');
+    settingsTitle.textContent = '设置';
+    settingsTitle.style.cssText = `
+      margin: 0;
+      font-size: 18px;
+      color: #333;
+    `;
+
+    const closeSettingsButton = document.createElement('button');
+    closeSettingsButton.textContent = '×';
+    closeSettingsButton.style.cssText = `
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: #999;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+    closeSettingsButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.settingsPanel.style.display = 'none';
+    });
+
+    settingsHeader.appendChild(settingsTitle);
+    settingsHeader.appendChild(closeSettingsButton);
+    this.settingsPanel.appendChild(settingsHeader);
+
+    const settingsContent = document.createElement('div');
+    settingsContent.style.cssText = `
+      max-height: 400px;
+      overflow-y: auto;
+    `;
+
+    // 过滤设置
+    const filterSection = document.createElement('div');
+    filterSection.style.cssText = `
+      margin-bottom: 20px;
+    `;
+
+    const filterTitle = document.createElement('h4');
+    filterTitle.textContent = '内容过滤';
+    filterTitle.style.cssText = `
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: #666;
+    `;
+    filterSection.appendChild(filterTitle);
+
+    // 广告过滤
+    const adFilterDiv = document.createElement('div');
+    adFilterDiv.style.cssText = `
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+    `;
+    const adFilterCheckbox = document.createElement('input');
+    adFilterCheckbox.type = 'checkbox';
+    adFilterCheckbox.id = 'adFilter';
+    adFilterCheckbox.checked = this.contentExtractor.config.enableAdFiltering;
+    adFilterCheckbox.style.cssText = `
+      margin-right: 8px;
+    `;
+    const adFilterLabel = document.createElement('label');
+    adFilterLabel.textContent = '过滤广告';
+    adFilterLabel.htmlFor = 'adFilter';
+    adFilterLabel.style.cssText = `
+      font-size: 14px;
+      color: #333;
+      cursor: pointer;
+    `;
+    adFilterDiv.appendChild(adFilterCheckbox);
+    adFilterDiv.appendChild(adFilterLabel);
+    filterSection.appendChild(adFilterDiv);
+
+    // 噪声过滤
+    const noiseFilterDiv = document.createElement('div');
+    noiseFilterDiv.style.cssText = `
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+    `;
+    const noiseFilterCheckbox = document.createElement('input');
+    noiseFilterCheckbox.type = 'checkbox';
+    noiseFilterCheckbox.id = 'noiseFilter';
+    noiseFilterCheckbox.checked = this.contentExtractor.config.enableNoiseFiltering;
+    noiseFilterCheckbox.style.cssText = `
+      margin-right: 8px;
+    `;
+    const noiseFilterLabel = document.createElement('label');
+    noiseFilterLabel.textContent = '过滤导航和噪声内容';
+    noiseFilterLabel.htmlFor = 'noiseFilter';
+    noiseFilterLabel.style.cssText = `
+      font-size: 14px;
+      color: #333;
+      cursor: pointer;
+    `;
+    noiseFilterDiv.appendChild(noiseFilterCheckbox);
+    noiseFilterDiv.appendChild(noiseFilterLabel);
+    filterSection.appendChild(noiseFilterDiv);
+
+    // 视频过滤
+    const videoFilterDiv = document.createElement('div');
+    videoFilterDiv.style.cssText = `
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+    `;
+    const videoFilterCheckbox = document.createElement('input');
+    videoFilterCheckbox.type = 'checkbox';
+    videoFilterCheckbox.id = 'videoFilter';
+    videoFilterCheckbox.checked = true;
+    videoFilterCheckbox.style.cssText = `
+      margin-right: 8px;
+    `;
+    const videoFilterLabel = document.createElement('label');
+    videoFilterLabel.textContent = '过滤视频和iframe';
+    videoFilterLabel.htmlFor = 'videoFilter';
+    videoFilterLabel.style.cssText = `
+      font-size: 14px;
+      color: #333;
+      cursor: pointer;
+    `;
+    videoFilterDiv.appendChild(videoFilterCheckbox);
+    videoFilterDiv.appendChild(videoFilterLabel);
+    filterSection.appendChild(videoFilterDiv);
+
+    settingsContent.appendChild(filterSection);
+
+    // 去重设置
+    const dedupSection = document.createElement('div');
+    dedupSection.style.cssText = `
+      margin-bottom: 20px;
+    `;
+
+    const dedupTitle = document.createElement('h4');
+    dedupTitle.textContent = '文本去重';
+    dedupTitle.style.cssText = `
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: #666;
+    `;
+    dedupSection.appendChild(dedupTitle);
+
+    const dedupThresholdDiv = document.createElement('div');
+    dedupThresholdDiv.style.cssText = `
+      margin-bottom: 10px;
+    `;
+    const dedupThresholdLabel = document.createElement('label');
+    dedupThresholdLabel.textContent = '相似度阈值（0-1）:';
+    dedupThresholdLabel.style.cssText = `
+      font-size: 14px;
+      color: #333;
+      display: block;
+      margin-bottom: 5px;
+    `;
+    const dedupThresholdInput = document.createElement('input');
+    dedupThresholdInput.type = 'range';
+    dedupThresholdInput.min = '0';
+    dedupThresholdInput.max = '1';
+    dedupThresholdInput.step = '0.1';
+    dedupThresholdInput.value = this.deduplication.config.similarityThreshold;
+    dedupThresholdInput.style.cssText = `
+      width: 100%;
+    `;
+    const dedupThresholdValue = document.createElement('span');
+    dedupThresholdValue.textContent = this.deduplication.config.similarityThreshold;
+    dedupThresholdValue.style.cssText = `
+      font-size: 12px;
+      color: #666;
+      display: block;
+      margin-top: 5px;
+    `;
+    dedupThresholdInput.addEventListener('input', (e) => {
+      dedupThresholdValue.textContent = e.target.value;
+    });
+    dedupThresholdDiv.appendChild(dedupThresholdLabel);
+    dedupThresholdDiv.appendChild(dedupThresholdInput);
+    dedupThresholdDiv.appendChild(dedupThresholdValue);
+    dedupSection.appendChild(dedupThresholdDiv);
+
+    settingsContent.appendChild(dedupSection);
+
+    // 内容长度设置
+    const lengthSection = document.createElement('div');
+    lengthSection.style.cssText = `
+      margin-bottom: 20px;
+    `;
+
+    const lengthTitle = document.createElement('h4');
+    lengthTitle.textContent = '内容长度';
+    lengthTitle.style.cssText = `
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: #666;
+    `;
+    lengthSection.appendChild(lengthTitle);
+
+    const minLengthDiv = document.createElement('div');
+    minLengthDiv.style.cssText = `
+      margin-bottom: 10px;
+    `;
+    const minLengthLabel = document.createElement('label');
+    minLengthLabel.textContent = '最小内容长度:';
+    minLengthLabel.style.cssText = `
+      font-size: 14px;
+      color: #333;
+      display: block;
+      margin-bottom: 5px;
+    `;
+    const minLengthInput = document.createElement('input');
+    minLengthInput.type = 'number';
+    minLengthInput.min = '0';
+    minLengthInput.value = this.contentExtractor.config.minContentLength;
+    minLengthInput.style.cssText = `
+      width: 100%;
+      padding: 5px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    `;
+    minLengthDiv.appendChild(minLengthLabel);
+    minLengthDiv.appendChild(minLengthInput);
+    lengthSection.appendChild(minLengthDiv);
+
+    settingsContent.appendChild(lengthSection);
+
+    // 保存按钮
+    const saveButton = document.createElement('button');
+    saveButton.textContent = '保存设置';
+    saveButton.style.cssText = `
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 100%;
+      margin-top: 20px;
+    `;
+    saveButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      
+      // 保存设置
+      this.contentExtractor.config.enableAdFiltering = adFilterCheckbox.checked;
+      this.contentExtractor.config.enableNoiseFiltering = noiseFilterCheckbox.checked;
+      this.deduplication.config.similarityThreshold = parseFloat(dedupThresholdInput.value);
+      this.contentExtractor.config.minContentLength = parseInt(minLengthInput.value);
+      
+      // 保存到本地存储
+      chrome.storage.local.set({
+        extractorSettings: {
+          enableAdFiltering: adFilterCheckbox.checked,
+          enableNoiseFiltering: noiseFilterCheckbox.checked,
+          similarityThreshold: parseFloat(dedupThresholdInput.value),
+          minContentLength: parseInt(minLengthInput.value)
+        }
+      }, () => {
+        console.log('设置已保存');
+        this.showStatus('设置已保存', 'success');
+        this.settingsPanel.style.display = 'none';
+      });
+    });
+
+    settingsContent.appendChild(saveButton);
+    this.settingsPanel.appendChild(settingsContent);
+
+    document.body.appendChild(this.settingsPanel);
+  }
+
+  loadSettings() {
+    // 从本地存储加载设置
+    chrome.storage.local.get('extractorSettings', (result) => {
+      if (result.extractorSettings) {
+        const settings = result.extractorSettings;
+        if (settings.enableAdFiltering !== undefined) {
+          this.contentExtractor.config.enableAdFiltering = settings.enableAdFiltering;
+        }
+        if (settings.enableNoiseFiltering !== undefined) {
+          this.contentExtractor.config.enableNoiseFiltering = settings.enableNoiseFiltering;
+        }
+        if (settings.similarityThreshold !== undefined) {
+          this.deduplication.config.similarityThreshold = settings.similarityThreshold;
+        }
+        if (settings.minContentLength !== undefined) {
+          this.contentExtractor.config.minContentLength = settings.minContentLength;
+        }
+        console.log('设置已加载:', settings);
+      }
+    });
   }
 }
 

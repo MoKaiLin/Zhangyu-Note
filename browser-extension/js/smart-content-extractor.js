@@ -222,6 +222,11 @@ class SmartContentExtractor {
     const id = (element.id || '').toLowerCase();
     const tagName = element.tagName.toLowerCase();
 
+    // 直接过滤视频和iframe标签
+    if (tagName === 'video' || tagName === 'iframe') {
+      return true;
+    }
+
     if (tagName === 'table' || tagName === 'tr' || tagName === 'td' || tagName === 'th') {
       this.statistics.noiseElements++;
       return true;
@@ -266,7 +271,22 @@ class SmartContentExtractor {
       /广告/,
       /\bads\b/,
       /\bbanner-ad\b/,
-      /\bpromotion-box\b/
+      /\bpromotion-box\b/,
+      /\bsponsor\b/,
+      /\bpromoted\b/,
+      /\bpaid\b/,
+      /\badvert\b/,
+      /\bcommercial\b/,
+      /赞助商/,
+      /合作推广/,
+      /广告投放/,
+      /adsense/,
+      /doubleclick/,
+      /ad-zone/,
+      /ad-container/,
+      /ad-wrapper/,
+      /advertising/,
+      /ad-placement/
     ];
 
     for (const pattern of adPatterns) {
@@ -297,6 +317,52 @@ class SmartContentExtractor {
       /\bregister\b/,
       /登录/,
       /注册/,
+      /\bwidget\b/,
+      /\bshare\b/,
+      /\bsocial\b/,
+      /\bcomment\b/,
+      /\brelated\b/,
+      /\brecommended\b/,
+      /\bfooter\b/,
+      /\bheader\b/,
+      /\bcopyright\b/,
+      /\bterms\b/,
+      /\bpolicy\b/,
+      /\bprivacy\b/,
+      /\bsitemap\b/,
+      /\bcontact\b/,
+      /\babout\b/,
+      /\bauthor\b/,
+      /\bprofile\b/,
+      /\bfollow\b/,
+      /\bsubscribe\b/,
+      /\bnewsletter\b/,
+      /\bsearch\b/,
+      /\bsearch-results\b/,
+      /\bpagination\b/,
+      /\bbreadcrumb\b/,
+      /\btoc\b/,
+      /\btable-of-contents\b/,
+      /分享/,
+      /社交/,
+      /评论/,
+      /相关/,
+      /推荐/,
+      /版权/,
+      /条款/,
+      /政策/,
+      /隐私/,
+      /站点地图/,
+      /联系/,
+      /关于/,
+      /作者/,
+      /个人资料/,
+      /关注/,
+      /订阅/,
+      /搜索/,
+      /分页/,
+      /面包屑/,
+      /目录/,
       /\btoc\b/,
       /\bbreadcrumb\b/,
       /\bpagination\b/,
@@ -323,7 +389,27 @@ class SmartContentExtractor {
       /\bvideo\b/,
       /\bplayer\b/,
       /播放器/,
-      /视频播放/
+      /视频播放/,
+      /\byoutube\b/,
+      /\bvimeo\b/,
+      /\bembed\b/,
+      /\biframe\b/,
+      /\bmp4\b/,
+      /\bavi\b/,
+      /\bwmv\b/,
+      /\bflv\b/,
+      /\bmov\b/,
+      /视频/,
+      /播放/,
+      /时长/,
+      /watch/,
+      /播放量/,
+      /观看次数/,
+      /订阅/,
+      /粉丝/,
+      /点赞/,
+      /投币/,
+      /收藏/
     ];
     
     for (const pattern of videoPatterns) {
