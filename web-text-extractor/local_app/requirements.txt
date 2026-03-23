@@ -1,0 +1,21 @@
+# 依赖包
+
+# WebSocket服务器
+websockets
+
+# 无头浏览器
+selenium
+webdriver-manager
+
+# 内容提取
+requests
+trafilatura
+
+# OCR（可选）
+pytesseract
+Pillow
+
+# 其他
+beautifulsoup4
+lxml
+chardet
